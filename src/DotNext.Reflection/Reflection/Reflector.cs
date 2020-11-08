@@ -1,8 +1,10 @@
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Reflection.Emit;
+using System.Runtime.CompilerServices;
+using static InlineIL.IL;
+using static InlineIL.IL.Emit;
 
 namespace DotNext.Reflection
 {
@@ -168,103 +170,131 @@ namespace DotNext.Reflection
             };
         }
 
-        private static DynamicInvoker Unreflect<TMethod>(TMethod method, Func<Expression?, TMethod, IEnumerable<Expression>, Expression> resultBuilder)
-            where TMethod : MethodBase
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static ref T? AsTypedReference<T>(ref object? item)
+            where T : class
         {
-            var target = Expression.Parameter(typeof(object));
-            var arguments = Expression.Parameter(typeof(object[]));
-            Expression? thisArg;
-            if (method.IsStatic || method.MemberType == MemberTypes.Constructor)
-                thisArg = null;
-            else if (method.DeclaringType.IsValueType)
-                thisArg = Expression.Unbox(target, method.DeclaringType);
+            Push(ref item);
+            Dup();
+            Ldind_Ref();
+            Castclass<T>();
+            Pop();
+            return ref ReturnRef<T?>();
+        }
+
+        private static DynamicInvoker Unreflect(MethodBase method, Action<ILGenerator> methodCall)
+        {
+            Type? parameterType = method.DeclaringType;
+
+            var builder = new DynamicMethod(method.ToString(), typeof(object), new[] { typeof(object), typeof(object[]) }, true);
+            var generator = builder.GetILGenerator();
+
+            // push this arg
+            if (method.IsConstructor || method.IsStatic || parameterType is null)
+            {
+            }
+            else if (parameterType.IsValueType)
+            {
+                generator.Emit(OpCodes.Ldarg_0);
+                generator.Emit(OpCodes.Unbox, parameterType);
+            }
             else
-                thisArg = Expression.Convert(target, method.DeclaringType);
+            {
+                generator.Emit(OpCodes.Ldarg_0);
+                generator.Emit(OpCodes.Castclass, parameterType);
+            }
 
-            ICollection<Expression> arglist = new LinkedList<Expression>(), prologue = new LinkedList<Expression>(), epilogue = new LinkedList<Expression>();
-            ICollection<ParameterExpression> tempVars = new LinkedList<ParameterExpression>();
-
-            // handle parameters
+            // push parameters
             foreach (var parameter in method.GetParameters())
             {
-                Expression argument = Expression.ArrayAccess(arguments, Expression.Constant(parameter.Position));
+                generator.Emit(OpCodes.Ldarg_1);
+                generator.Emit(OpCodes.Ldc_I4, parameter.Position);
+                generator.Emit(OpCodes.Conv_I);
                 if (parameter.ParameterType.IsByRefLike)
                 {
                     throw new NotSupportedException();
                 }
                 else if (parameter.ParameterType.IsByRef)
                 {
-                    var parameterType = parameter.ParameterType.GetElementType();
-
-                    // value type parameter can be passed as unboxed reference
-                    if (parameterType.IsValueType)
+                    parameterType = parameter.ParameterType.GetElementType();
+                    if (parameterType.IsPointer)
                     {
-                        argument = Expression.Unbox(argument, parameterType);
+                        generator.Emit(OpCodes.Ldelem, typeof(object));
+                        generator.Emit(OpCodes.Unbox, typeof(IntPtr));
+                    }
+                    else if (parameterType.IsValueType)
+                    {
+                        generator.Emit(OpCodes.Ldelem, typeof(object));
+                        generator.Emit(OpCodes.Unbox, parameterType);
                     }
                     else
                     {
-                        var tempVar = Expression.Variable(parameterType);
-                        tempVars.Add(tempVar);
-                        prologue.Add(Expression.Assign(tempVar, parameterType.IsPointer ? Unwrap(argument, parameterType.GetElementType()) : Expression.Convert(argument, parameterType)));
-                        if (parameterType.IsPointer)
-                            epilogue.Add(Expression.Assign(argument, Wrap(tempVar)));
-                        else if (parameterType.IsValueType)
-                            epilogue.Add(Expression.Assign(argument, Expression.Convert(tempVar, typeof(object))));
-                        else
-                            epilogue.Add(Expression.Assign(argument, tempVar));
-                        argument = tempVar;
+                        generator.Emit(OpCodes.Ldelema, typeof(object));
+                        generator.Emit(OpCodes.Call, AsTypedReference(parameterType));
                     }
                 }
                 else if (parameter.ParameterType.IsPointer)
                 {
-                    argument = Unwrap(argument, parameter.ParameterType);
+                    generator.Emit(OpCodes.Ldelem, typeof(object));
+                    generator.Emit(OpCodes.Call, UnboxPointer());
+                }
+                else if (parameter.ParameterType.IsValueType)
+                {
+                    generator.Emit(OpCodes.Ldelem, typeof(object));
+                    generator.Emit(OpCodes.Unbox_Any, parameter.ParameterType);
+                }
+                else if (parameter.ParameterType == typeof(object))
+                {
+                    generator.Emit(OpCodes.Ldelem, typeof(object));
                 }
                 else
                 {
-                    argument = Expression.Convert(argument, parameter.ParameterType);
+                    generator.Emit(OpCodes.Ldelem, typeof(object));
+                    generator.Emit(OpCodes.Castclass, parameter.ParameterType);
                 }
-
-                arglist.Add(argument);
             }
 
-            // construct body of the method
-            Expression result = resultBuilder(thisArg, method, arglist);
-            if (result.Type.IsByRefLike)
-                throw new NotSupportedException();
-            else if (result.Type == typeof(void))
-                epilogue.Add(Expression.Default(typeof(object)));
-            else if (result.Type.IsPointer)
-                result = Wrap(result);
-            else if (result.Type.IsValueType)
-                result = Expression.Convert(result, typeof(object));
+            // invoke method
+            methodCall(generator);
 
-            // construct lambda expression
-            bool useTailCall;
-            if (epilogue.Count == 0)
+            generator.Emit(OpCodes.Ret);
+
+            return builder.CreateDelegate<DynamicInvoker>();
+
+            static MethodInfo AsTypedReference(Type typeToken)
+                => typeof(Reflector).GetMethod(nameof(AsTypedReference), 1, BindingFlags.Static | BindingFlags.DeclaredOnly | BindingFlags.NonPublic, null, new[] { typeof(object).MakeByRefType() }, null).MakeGenericMethod(typeToken);
+        
+            static MethodInfo UnboxPointer()
+                => typeof(Pointer).GetMethod(nameof(Pointer.Unbox), new[] { typeof(object) });
+        }
+
+        private static void GenerateMethodCall(this MethodInfo method, ILGenerator generator)
+        {
+            OpCode callCode = method.IsStatic || method.DeclaringType.IsValueType ?
+                    OpCodes.Call :
+                    OpCodes.Callvirt;
+            generator.Emit(callCode, method);
+
+            if (method.ReturnType == typeof(void))
             {
-                useTailCall = true;
+                generator.Emit(OpCodes.Ldnull);
             }
-            else if (result.Type == typeof(void))
+            else if (method.ReturnType.IsPointer)
             {
-                result = Expression.Block(typeof(object), tempVars, prologue.Append(result).Concat(epilogue));
-                useTailCall = false;
+                generator.Emit(OpCodes.Ldtoken, method.ReturnType);
+                generator.Emit(OpCodes.Call, GetTypeFromHandle());
+                generator.Emit(OpCodes.Call, BoxPointer());
             }
-            else
+            else if (method.ReturnType.IsValueType)
             {
-                var resultVar = Expression.Variable(typeof(object));
-                tempVars.Add(resultVar);
-                result = Expression.Assign(resultVar, result);
-                epilogue.Add(resultVar);
-                result = Expression.Block(typeof(object), tempVars, prologue.Append(result).Concat(epilogue));
-                useTailCall = false;
+                generator.Emit(OpCodes.Box, method.ReturnType);
             }
 
-            // help GC
-            arglist.Clear();
-            prologue.Clear();
-            epilogue.Clear();
-            tempVars.Clear();
-            return Expression.Lambda<DynamicInvoker>(result, useTailCall, target, arguments).Compile();
+            static MethodInfo BoxPointer()
+                => typeof(Pointer).GetMethod(nameof(Pointer.Box), new[] { typeof(void*), typeof(Type) });
+
+            static MethodInfo GetTypeFromHandle()
+                => typeof(Type).GetMethod(nameof(Type.GetTypeFromHandle), new[] { typeof(RuntimeTypeHandle) });
         }
 
         /// <summary>
@@ -274,10 +304,14 @@ namespace DotNext.Reflection
         /// <returns>The delegate that can be used to invoke the method.</returns>
         /// <exception cref="NotSupportedException">The type of parameter or return type is ref-like value type.</exception>
         public static DynamicInvoker Unreflect(this MethodInfo method)
-            => Unreflect(method, Expression.Call);
+            => Unreflect(method, method.GenerateMethodCall);
 
-        private static Expression New(Expression? thisArg, ConstructorInfo ctor, IEnumerable<Expression> args)
-            => Expression.New(ctor, args);
+        private static void GenerateCtorCall(this ConstructorInfo ctor, ILGenerator generator)
+        {
+            generator.Emit(OpCodes.Newobj, ctor);
+            if (ctor.DeclaringType.IsValueType)
+                generator.Emit(OpCodes.Box, ctor.DeclaringType);
+        }
 
         /// <summary>
         /// Creates dynamic invoker for the constructor.
@@ -286,6 +320,6 @@ namespace DotNext.Reflection
         /// <returns>The delegate that can be used to create an object instance.</returns>
         /// <exception cref="NotSupportedException">The type of parameter is ref-like value type.</exception>
         public static DynamicInvoker Unreflect(this ConstructorInfo ctor)
-            => Unreflect(ctor, New);
+            => Unreflect(ctor, ctor.GenerateCtorCall);
     }
 }

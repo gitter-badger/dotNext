@@ -147,6 +147,24 @@ namespace DotNext.Reflection
         }
 
         [Fact]
+        public static void InstantiateValueType()
+        {
+            var ctor = typeof(IntPtr).GetConstructor(new[] { typeof(int) }).Unreflect();
+            Equal(new IntPtr(42), ctor(null, 42));
+        }
+
+        [Fact]
+        public static void CallByRefMethod()
+        {
+            var invoker = new RefAction<string, object>(SetString).Method.Unreflect();
+            object[] args = { null, 42 };
+            Null(invoker(null, args));
+            Equal(args[0], "42");
+
+            static void SetString(ref string value, object obj) => value = obj.ToString();
+        }
+
+        [Fact]
         public static void ModifyPropertyByRef()
         {
             object point = new Point();
