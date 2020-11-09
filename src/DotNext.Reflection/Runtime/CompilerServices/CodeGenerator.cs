@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
 using static InlineIL.IL;
 using static InlineIL.IL.Emit;
@@ -10,14 +11,32 @@ namespace DotNext.Runtime.CompilerServices
 {
     internal static class CodeGenerator
     {
-        internal static MethodInfo BoxPointerMethod
+        private static MethodInfo BoxPointerMethod
             => typeof(Pointer).GetMethod(nameof(Pointer.Box), new[] { typeof(void*), typeof(Type) });
 
-        internal static MethodInfo GetTypeFromHandleMethod
+        internal static void BoxPointer(this ILGenerator generator, Type pointerType)
+        {
+            Debug.Assert(pointerType.IsPointer);
+            generator.LoadType(pointerType);
+            generator.Emit(OpCodes.Call, BoxPointerMethod);
+        }
+
+        private static MethodInfo GetTypeFromHandleMethod
             => typeof(Type).GetMethod(nameof(Type.GetTypeFromHandle), new[] { typeof(RuntimeTypeHandle) });
 
-        internal static MethodInfo UnboxPointerMethod
+        internal static void LoadType(this ILGenerator generator, Type typeToken)
+        {
+            generator.Emit(OpCodes.Ldtoken, typeToken);
+            generator.Emit(OpCodes.Call, GetTypeFromHandleMethod);
+        }
+
+        private static MethodInfo UnboxPointerMethod
             => typeof(Pointer).GetMethod(nameof(Pointer.Unbox), new[] { typeof(object) });
+
+        internal static void UnboxPointer(this ILGenerator generator)
+        {
+            generator.Emit(OpCodes.Call, UnboxPointerMethod);
+        }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ref T? AsTypedReference<T>(ref object? item)
@@ -31,8 +50,10 @@ namespace DotNext.Runtime.CompilerServices
             return ref ReturnRef<T?>();
         }
 
-        internal static MethodInfo AsTypedReference(Type typeToken)
-            => typeof(CodeGenerator).GetMethod(nameof(AsTypedReference), 1, new[] { typeof(object).MakeByRefType() }).MakeGenericMethod(typeToken);
+        internal static void AsTypedReference(this ILGenerator generator, Type typeToken)
+        {
+            generator.Emit(OpCodes.Call, typeof(CodeGenerator).GetMethod(nameof(AsTypedReference), 1, new[] { typeof(object).MakeByRefType() }).MakeGenericMethod(typeToken));
+        }
 
         internal static unsafe object Wrap<T>(T* ptr)
             where T : unmanaged => Pointer.Box(ptr, typeof(T*));

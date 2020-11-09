@@ -215,13 +215,13 @@ namespace DotNext.Reflection
                     else
                     {
                         generator.Emit(OpCodes.Ldelema, typeof(object));
-                        generator.Emit(OpCodes.Call, AsTypedReference(parameterType));
+                        generator.AsTypedReference(parameterType);
                     }
                 }
                 else if (parameter.ParameterType.IsPointer)
                 {
                     generator.Emit(OpCodes.Ldelem, typeof(object));
-                    generator.Emit(OpCodes.Call, UnboxPointerMethod);
+                    generator.UnboxPointer();
                 }
                 else if (parameter.ParameterType.IsValueType)
                 {
@@ -262,9 +262,7 @@ namespace DotNext.Reflection
             {
                 // pointer value must be boxed after actual call. Tail call is not applicable.
                 generator.Emit(callCode, method);
-                generator.Emit(OpCodes.Ldtoken, method.ReturnType);
-                generator.Emit(OpCodes.Call, GetTypeFromHandleMethod);
-                generator.Emit(OpCodes.Call, BoxPointerMethod);
+                generator.BoxPointer(method.ReturnType);
             }
             else if (method.ReturnType.IsValueType)
             {
