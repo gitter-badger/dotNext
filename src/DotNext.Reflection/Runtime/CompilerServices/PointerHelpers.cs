@@ -7,6 +7,15 @@ namespace DotNext.Runtime.CompilerServices
 {
     internal static class PointerHelpers
     {
+        internal static MethodInfo BoxPointerMethod
+            => typeof(Pointer).GetMethod(nameof(Pointer.Box), new[] { typeof(void*), typeof(Type) });
+
+        internal static MethodInfo GetTypeFromHandleMethod
+            => typeof(Type).GetMethod(nameof(Type.GetTypeFromHandle), new[] { typeof(RuntimeTypeHandle) });
+
+        internal static MethodInfo UnboxPointerMethod
+            => typeof(Pointer).GetMethod(nameof(Pointer.Unbox), new[] { typeof(object) });
+
         internal static unsafe object Wrap<T>(T* ptr)
             where T : unmanaged => Pointer.Box(ptr, typeof(T*));
 

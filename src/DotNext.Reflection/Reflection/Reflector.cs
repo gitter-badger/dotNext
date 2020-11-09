@@ -236,7 +236,7 @@ namespace DotNext.Reflection
                 else if (parameter.ParameterType.IsPointer)
                 {
                     generator.Emit(OpCodes.Ldelem, typeof(object));
-                    generator.Emit(OpCodes.Call, UnboxPointer());
+                    generator.Emit(OpCodes.Call, UnboxPointerMethod);
                 }
                 else if (parameter.ParameterType.IsValueType)
                 {
@@ -256,45 +256,45 @@ namespace DotNext.Reflection
 
             // invoke method
             methodCall(generator);
-
             generator.Emit(OpCodes.Ret);
 
             return builder.CreateDelegate<DynamicInvoker>();
 
             static MethodInfo AsTypedReference(Type typeToken)
                 => typeof(Reflector).GetMethod(nameof(AsTypedReference), 1, BindingFlags.Static | BindingFlags.DeclaredOnly | BindingFlags.NonPublic, null, new[] { typeof(object).MakeByRefType() }, null).MakeGenericMethod(typeToken);
-        
-            static MethodInfo UnboxPointer()
-                => typeof(Pointer).GetMethod(nameof(Pointer.Unbox), new[] { typeof(object) });
         }
 
         private static void GenerateMethodCall(this MethodInfo method, ILGenerator generator)
         {
-            OpCode callCode = method.IsStatic || method.DeclaringType.IsValueType ?
-                    OpCodes.Call :
-                    OpCodes.Callvirt;
-            generator.Emit(callCode, method);
+            var callCode = method.IsStatic || method.DeclaringType.IsValueType ?
+                OpCodes.Call :
+                OpCodes.Callvirt;
 
+            // for void return type it's necessary to return null. Tail call is not applicable.
             if (method.ReturnType == typeof(void))
             {
+                generator.Emit(callCode, method);
                 generator.Emit(OpCodes.Ldnull);
             }
             else if (method.ReturnType.IsPointer)
             {
+                // pointer value must be boxed after actual call. Tail call is not applicable.
+                generator.Emit(callCode, method);
                 generator.Emit(OpCodes.Ldtoken, method.ReturnType);
-                generator.Emit(OpCodes.Call, GetTypeFromHandle());
-                generator.Emit(OpCodes.Call, BoxPointer());
+                generator.Emit(OpCodes.Call, GetTypeFromHandleMethod);
+                generator.Emit(OpCodes.Call, BoxPointerMethod);
             }
             else if (method.ReturnType.IsValueType)
             {
+                // returned value type must be boxed. Tail call is not applicable.
+                generator.Emit(callCode, method);
                 generator.Emit(OpCodes.Box, method.ReturnType);
             }
-
-            static MethodInfo BoxPointer()
-                => typeof(Pointer).GetMethod(nameof(Pointer.Box), new[] { typeof(void*), typeof(Type) });
-
-            static MethodInfo GetTypeFromHandle()
-                => typeof(Type).GetMethod(nameof(Type.GetTypeFromHandle), new[] { typeof(RuntimeTypeHandle) });
+            else
+            {
+                generator.Emit(OpCodes.Tailcall);
+                generator.Emit(callCode, method);
+            }
         }
 
         /// <summary>
