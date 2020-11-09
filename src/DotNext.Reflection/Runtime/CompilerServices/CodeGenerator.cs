@@ -11,6 +11,26 @@ namespace DotNext.Runtime.CompilerServices
 {
     internal static class CodeGenerator
     {
+        internal static void LoadField(this ILGenerator generator, FieldInfo field, bool volatileAccess = false)
+        {
+            if (volatileAccess)
+                generator.Emit(OpCodes.Volatile);
+            if (field.IsStatic || field.DeclaringType is null)
+                generator.Emit(OpCodes.Ldsfld, field);
+            else
+                generator.Emit(OpCodes.Ldfld, field);
+        }
+
+        internal static void StoreField(this ILGenerator generator, FieldInfo field, bool volatileAccess = false)
+        {
+            if (volatileAccess)
+                generator.Emit(OpCodes.Volatile);
+            if (field.IsStatic || field.DeclaringType is null)
+                generator.Emit(OpCodes.Stsfld, field);
+            else
+                generator.Emit(OpCodes.Stfld, field);
+        }
+
         private static MethodInfo BoxPointerMethod
             => typeof(Pointer).GetMethod(nameof(Pointer.Box), new[] { typeof(void*), typeof(Type) });
 

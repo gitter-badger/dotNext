@@ -159,7 +159,7 @@ namespace DotNext.Reflection
             var invoker = new RefAction<string, object>(SetString).Method.Unreflect();
             object[] args = { null, 42 };
             Null(invoker(null, args));
-            Equal(args[0], "42");
+            Equal("42", args[0]);
 
             static void SetString(ref string value, object obj) => value = obj.ToString();
         }
