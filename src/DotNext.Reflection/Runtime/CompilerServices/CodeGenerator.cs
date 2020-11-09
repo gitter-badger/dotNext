@@ -8,7 +8,7 @@ using static InlineIL.IL.Emit;
 
 namespace DotNext.Runtime.CompilerServices
 {
-    internal static class PointerHelpers
+    internal static class CodeGenerator
     {
         internal static MethodInfo BoxPointerMethod
             => typeof(Pointer).GetMethod(nameof(Pointer.Box), new[] { typeof(void*), typeof(Type) });
@@ -32,7 +32,7 @@ namespace DotNext.Runtime.CompilerServices
         }
 
         internal static MethodInfo AsTypedReference(Type typeToken)
-            => typeof(PointerHelpers).GetMethod(nameof(AsTypedReference), 1, new[] { typeof(object).MakeByRefType() }).MakeGenericMethod(typeToken);
+            => typeof(CodeGenerator).GetMethod(nameof(AsTypedReference), 1, new[] { typeof(object).MakeByRefType() }).MakeGenericMethod(typeToken);
 
         internal static unsafe object Wrap<T>(T* ptr)
             where T : unmanaged => Pointer.Box(ptr, typeof(T*));
@@ -46,7 +46,7 @@ namespace DotNext.Runtime.CompilerServices
             var elementType = expression.Type.GetElementType();
             if (elementType == typeof(void))
                 return Expression.Call(typeof(Pointer), nameof(Pointer.Box), Array.Empty<Type>(), expression, Expression.Constant(typeof(void*)));
-            return Expression.Call(typeof(PointerHelpers), nameof(Wrap), new[] { elementType }, expression);
+            return Expression.Call(typeof(CodeGenerator), nameof(Wrap), new[] { elementType }, expression);
         }
 
         internal static Expression Unwrap(Expression expression, Type expectedType)
@@ -55,7 +55,7 @@ namespace DotNext.Runtime.CompilerServices
             var elementType = expectedType.GetElementType();
             if (elementType == typeof(void))
                 return Expression.Call(typeof(Pointer), nameof(Pointer.Unbox), Array.Empty<Type>(), expression);
-            return Expression.Call(typeof(PointerHelpers), nameof(Unwrap), new[] { elementType }, expression);
+            return Expression.Call(typeof(CodeGenerator), nameof(Unwrap), new[] { elementType }, expression);
         }
     }
 }

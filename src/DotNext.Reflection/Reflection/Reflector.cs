@@ -5,7 +5,7 @@ using System.Reflection.Emit;
 
 namespace DotNext.Reflection
 {
-    using static Runtime.CompilerServices.PointerHelpers;
+    using static Runtime.CompilerServices.CodeGenerator;
 
     /// <summary>
     /// Provides access to fast reflection routines.
