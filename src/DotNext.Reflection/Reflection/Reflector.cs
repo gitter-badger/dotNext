@@ -2,9 +2,6 @@ using System;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Reflection.Emit;
-using System.Runtime.CompilerServices;
-using static InlineIL.IL;
-using static InlineIL.IL.Emit;
 
 namespace DotNext.Reflection
 {
@@ -170,18 +167,6 @@ namespace DotNext.Reflection
             };
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal static ref T? AsTypedReference<T>(ref object? item)
-            where T : class
-        {
-            Push(ref item);
-            Dup();
-            Ldind_Ref();
-            Castclass<T>();
-            Pop();
-            return ref ReturnRef<T?>();
-        }
-
         private static DynamicInvoker Unreflect(MethodBase method, Action<ILGenerator> methodCall)
         {
             Type? parameterType = method.DeclaringType;
@@ -259,9 +244,6 @@ namespace DotNext.Reflection
             generator.Emit(OpCodes.Ret);
 
             return builder.CreateDelegate<DynamicInvoker>();
-
-            static MethodInfo AsTypedReference(Type typeToken)
-                => typeof(Reflector).GetMethod(nameof(AsTypedReference), 1, BindingFlags.Static | BindingFlags.DeclaredOnly | BindingFlags.NonPublic, null, new[] { typeof(object).MakeByRefType() }, null).MakeGenericMethod(typeToken);
         }
 
         private static void GenerateMethodCall(this MethodInfo method, ILGenerator generator)

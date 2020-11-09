@@ -2,6 +2,9 @@
 using System.Diagnostics;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.CompilerServices;
+using static InlineIL.IL;
+using static InlineIL.IL.Emit;
 
 namespace DotNext.Runtime.CompilerServices
 {
@@ -15,6 +18,21 @@ namespace DotNext.Runtime.CompilerServices
 
         internal static MethodInfo UnboxPointerMethod
             => typeof(Pointer).GetMethod(nameof(Pointer.Unbox), new[] { typeof(object) });
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ref T? AsTypedReference<T>(ref object? item)
+            where T : class
+        {
+            Push(ref item);
+            Dup();
+            Ldind_Ref();
+            Castclass<T>();
+            Pop();
+            return ref ReturnRef<T?>();
+        }
+
+        internal static MethodInfo AsTypedReference(Type typeToken)
+            => typeof(PointerHelpers).GetMethod(nameof(AsTypedReference), 1, new[] { typeof(object).MakeByRefType() }).MakeGenericMethod(typeToken);
 
         internal static unsafe object Wrap<T>(T* ptr)
             where T : unmanaged => Pointer.Box(ptr, typeof(T*));
