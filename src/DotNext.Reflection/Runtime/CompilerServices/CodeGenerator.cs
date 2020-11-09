@@ -71,7 +71,22 @@ namespace DotNext.Runtime.CompilerServices
 
         internal static void AsTypedReference(this ILGenerator generator, Type typeToken)
         {
+            Debug.Assert(typeToken.IsClass || typeToken.IsInterface);
             generator.Emit(OpCodes.Call, typeof(CodeGenerator).GetMethod(nameof(AsTypedReference), 1, new[] { typeof(object).MakeByRefType() }).MakeGenericMethod(typeToken));
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ref T AsBoxedValueType<T>(ref object? item)
+            where T : struct
+        {
+            item ??= default(T);
+            return ref Unsafe.Unbox<T>(item);
+        }
+
+        internal static void AsBoxedValueType(this ILGenerator generator, Type typeToken)
+        {
+            Debug.Assert(typeToken.IsValueType);
+            generator.Emit(OpCodes.Call, typeof(CodeGenerator).GetMethod(nameof(AsBoxedValueType), 1, new[] { typeof(object).MakeByRefType() }).MakeGenericMethod(typeToken));
         }
     }
 }
