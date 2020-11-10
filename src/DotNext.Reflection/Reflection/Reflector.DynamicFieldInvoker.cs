@@ -58,7 +58,7 @@ namespace DotNext.Reflection
             generator.Emit(OpCodes.Ldarg_1);
             generator.Emit(OpCodes.Ldc_I4_0);
             generator.Emit(OpCodes.Conv_I);
-            generator.Emit(OpCodes.Ldelem, typeof(object));
+            generator.Emit(OpCodes.Ldelem_Ref);
 
             // load new field value
             if (field.FieldType.IsValueType)

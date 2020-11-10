@@ -47,12 +47,12 @@ namespace DotNext.Reflection
                     parameterType = parameter.ParameterType.GetElementType();
                     if (parameterType.IsPointer)
                     {
-                        generator.Emit(OpCodes.Ldelem, typeof(object));
+                        generator.Emit(OpCodes.Ldelem_Ref);
                         generator.Emit(OpCodes.Unbox, typeof(IntPtr));
                     }
                     else if (parameterType.IsValueType)
                     {
-                        generator.Emit(OpCodes.Ldelem, typeof(object));
+                        generator.Emit(OpCodes.Ldelem_Ref);
                         generator.Emit(OpCodes.Unbox, parameterType);
                     }
                     else
@@ -63,21 +63,21 @@ namespace DotNext.Reflection
                 }
                 else if (parameter.ParameterType.IsPointer)
                 {
-                    generator.Emit(OpCodes.Ldelem, typeof(object));
+                    generator.Emit(OpCodes.Ldelem_Ref);
                     generator.UnboxPointer();
                 }
                 else if (parameter.ParameterType.IsValueType)
                 {
-                    generator.Emit(OpCodes.Ldelem, typeof(object));
+                    generator.Emit(OpCodes.Ldelem_Ref);
                     generator.Emit(OpCodes.Unbox_Any, parameter.ParameterType);
                 }
                 else if (parameter.ParameterType == typeof(object))
                 {
-                    generator.Emit(OpCodes.Ldelem, typeof(object));
+                    generator.Emit(OpCodes.Ldelem_Ref);
                 }
                 else
                 {
-                    generator.Emit(OpCodes.Ldelem, typeof(object));
+                    generator.Emit(OpCodes.Ldelem_Ref);
                     generator.Emit(OpCodes.Castclass, parameter.ParameterType);
                 }
             }
